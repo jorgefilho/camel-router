@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Licensed to the Apache Software Foundation (ASF) under one or more contributor 
+	license agreements. See the NOTICE file distributed with this work for additional 
+	information regarding copyright ownership. The ASF licenses this file to 
+	You under the Apache License, Version 2.0 (the "License"); you may not use 
+	this file except in compliance with the License. You may obtain a copy of 
+	the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required 
+	by applicable law or agreed to in writing, software distributed under the 
+	License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS 
+	OF ANY KIND, either express or implied. See the License for the specific 
+	language governing permissions and limitations under the License. -->
+<!-- START SNIPPET: ex -->
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="
+         http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+         http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+         http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd">
+
+	<!-- first, define your individual @Configuration classes as beans -->
+	<bean id="jmsIn" class="org.apache.camel.component.jms.JmsComponent">
+		<property name="connectionFactory">
+			<bean class="org.apache.activemq.ActiveMQConnectionFactory">
+				<property name="brokerURL"
+					value="vm:broker:(tcp://0.0.0.0:6000)?brokerName=StepBroker&amp;persistent=false" />
+			</bean>
+		</property>
+	</bean>
+
+	<bean id="monitorBean" class="com.github.jorgefilho.camel.router.bean.MonitorBean" />
+
+	<bean id="remoteJndiTemplate" class="org.springframework.jndi.JndiTemplate">
+		<property name="environment">
+			<props>
+				<prop key="java.naming.factory.initial">org.jboss.naming.remote.client.InitialContextFactory</prop>
+				<prop key="java.naming.provider.url">http-remoting://192.168.80.120:8080</prop>
+				<prop key="java.naming.security.principal">jmsuser</prop>
+				<prop key="java.naming.security.credentials">Password1!</prop>
+			</props>
+		</property>
+	</bean>
+
+	<bean id="remoteJmsConnectionFactory" class="org.springframework.jndi.JndiObjectFactoryBean">
+		<property name="jndiTemplate" ref="remoteJndiTemplate" />
+		<property name="jndiName" value="jms/RemoteConnectionFactory" />
+	</bean>
+
+	<bean id="authenticatedJmsConnectionFactory"
+		class="org.springframework.jms.connection.UserCredentialsConnectionFactoryAdapter">
+		<property name="targetConnectionFactory" ref="remoteJmsConnectionFactory" />
+		<property name="username" value="jmsuser" />
+		<property name="password" value="Password1!" />
+		
+	</bean>
+
+	<bean name="jmsOut" class="org.apache.camel.component.jms.JmsComponent">
+		<property name="connectionFactory" ref="authenticatedJmsConnectionFactory" />
+	</bean>
+
+
+	<camelContext xmlns="http://camel.apache.org/schema/spring">
+		<route>
+			<from uri="file:/home/rodrigo/dev/projects/ws_luna/StepRouter/src/data?noop=true" />
+			<to uri="jmsIn:test.MyQueue" />
+		</route>
+		<route>
+			<from uri="jmsIn:test.MyQueue" />
+			<to uri="jmsOut:queue:RouterQ" />
+		</route>
+		<!--
+		<route>
+			<from uri="jmsOut:queue:RouterQ" />
+			<bean ref="monitorBean" method="logMsgHeader(${header})" />
+		</route>
+		-->
+	</camelContext>
+
+	<!-- be sure the configure class to be processed -->
+	<context:annotation-config />
+
+</beans>
+<!-- END SNIPPET: ex -->
